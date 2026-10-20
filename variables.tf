@@ -28,6 +28,10 @@ variable "subnets" {
       subnet_name    = "snet-db"
       address_prefix = "10.10.3.0/24"
     }
+    backup = {
+      subnet_name    = "snet-backup"
+      address_prefix = "10.10.4.0/24"
+    }
   }
 }
 variable "nsg_rules" {
