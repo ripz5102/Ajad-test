@@ -1,0 +1,29 @@
+name: Terraform CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.6"
+          
+      - name: Format Terraform
+        run: terraform fmt -check -recursive
+      - name: Initialise Terraform
+        run: terraform init -backend=false -input=false
+      - name: Validate Terraform
+        run: terraform validate -no-color
