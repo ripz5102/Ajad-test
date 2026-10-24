@@ -67,5 +67,33 @@ jobs:
       - name: Initialise Terraform Remote Backend
         run: terraform init -input=false
 
-      - name: Generate Terraform Plan
-        run: terraform plan -input=false -no-color -lock-timeout=2m -var-file="environments/dev.tfvars"
+      - name: Generate Terraform Plan and Summary
+        shell: bash
+        run: |
+          set +e
+
+          terraform plan \
+            -input=false \
+            -no-color \
+            -lock-timeout=2m \
+            -detailed-exitcode \
+            -var-file="environments/dev.tfvars"
+
+          EXIT_CODE=$?
+          set -e
+
+          case "$EXIT_CODE" in
+            0)
+              echo "### Terraform Plan: No changes" >> "$GITHUB_STEP_SUMMARY"
+              echo "Azure development infrastructure matches the configuration." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            2)
+              echo "### Terraform Plan: Changes proposed" >> "$GITHUB_STEP_SUMMARY"
+              echo "Review the Terraform plan in the job logs before approving deployment." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "### Terraform Plan: Failed" >> "$GITHUB_STEP_SUMMARY"
+              echo "Investigate the Terraform errors in the job logs." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
+          esac
