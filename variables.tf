@@ -32,6 +32,10 @@ variable "subnets" {
       subnet_name    = "snet-backup"
       address_prefix = "10.10.4.0/24"
     }
+    monitoring = {
+      subnet_name    = "snet-monitoring"
+      address_prefix = "10.10.5.0/24"
+    }
   }
 }
 variable "nsg_rules" {
