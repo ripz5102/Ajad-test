@@ -5,7 +5,7 @@ resource "azurerm_resource_group" "rg" {
 
   tags = {
     owner       = "aj"
-    environment = "dev"
+    environment = var.environment
     managed_by  = "Terraform"
   }
 }
@@ -14,7 +14,7 @@ resource "azurerm_resource_group" "rg" {
 module "network" {
   source = "./modules/network"
 
-  vnet_name           = "vnet_ajad_dev"
+  vnet_name           = var.vnet_name
   address_space       = var.vnet_address_space
   location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
@@ -39,8 +39,8 @@ resource "azurerm_network_security_rule" "nsg_rules" {
   protocol                   = "Tcp"
   source_port_range          = "*"
   destination_port_range     = each.value.destination_port
-  source_address_prefix      = "10.10.2.0/24"
-  destination_address_prefix = "10.10.1.0/24"
+  source_address_prefix      = var.subnets["mgmt"].address_prefix
+  destination_address_prefix = var.subnets["app"].address_prefix
 
   resource_group_name         = azurerm_resource_group.rg.name
   network_security_group_name = azurerm_network_security_group.nsg-ajad.name

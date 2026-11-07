@@ -72,6 +72,9 @@ variable "vnet_address_space" {
   type    = list(string)
   default = ["10.10.0.0/16"]
 }
-
+variable "environment" {
+  type    = string
+  default = "dev"
+}
 
 
