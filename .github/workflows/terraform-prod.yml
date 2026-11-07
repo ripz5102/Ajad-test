@@ -1,0 +1,121 @@
+name: Terraform Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-development-deploy
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Review Development Plan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.6"
+
+      - name: Azure Login - Planning Identity
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Initialise
+        run: terraform init -input=false
+
+      - name: Validate
+        run: terraform validate -no-color
+
+      - name: Generate saved plan
+        run: |
+          terraform plan \
+            -input=false \
+            -no-color \
+            -lock-timeout=2m \
+            -var-file="environments/dev.tfvars" \
+            -out=tfplan
+
+      - name: Plan summary
+        run: |
+          echo "### Terraform Development Plan" >> "$GITHUB_STEP_SUMMARY"
+          echo "Review the Generate saved plan logs before approving deployment." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload saved plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: development-plan
+          path: tfplan
+          retention-days: 1
+          if-no-files-found: error
+
+  apply:
+    name: Apply Development Plan
+    needs: plan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    environment: development
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_DEPLOY_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.6"
+
+      - name: Download approved plan
+        uses: actions/download-artifact@v4
+        with:
+          name: development-plan
+
+      - name: Azure Login - Deployment Identity
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Initialise
+        run: terraform init -input=false
+
+      - name: Apply saved plan
+        run: terraform apply -input=false -lock-timeout=2m tfplan
+
+      - name: Verify monitoring subnet
+        run: terraform state show 'module.network.azurerm_subnet.subnets["monitoring"]'
