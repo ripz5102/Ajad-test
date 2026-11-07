@@ -1,4 +1,5 @@
-name: Terraform Deploy
+
+name: Terraform Production Deploy
 
 on:
   workflow_dispatch:
@@ -7,12 +8,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: terraform-development-deploy
+  group: terraform-production-deploy
   cancel-in-progress: false
 
 jobs:
   plan:
-    name: Review Development Plan
+    name: Review Production Plan  # CHANGED
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
@@ -21,7 +22,7 @@ jobs:
       id-token: write
 
     env:
-      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_CLIENT_ID: ${{ vars.AZURE_PROD_PLAN_CLIENT_ID }} # CHANGED
       ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
@@ -36,15 +37,18 @@ jobs:
         with:
           terraform_version: "1.16.6"
 
-      - name: Azure Login - Planning Identity
+      - name: Azure Login - Production Planning Identity
         uses: azure/login@v3
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          client-id: ${{ vars.AZURE_PROD_PLAN_CLIENT_ID }} # CHANGED
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Initialise
-        run: terraform init -input=false
+      - name: Initialise Production Backend # CHANGED
+        run: |
+          terraform init \
+            -backend-config="key=prod.terraform.tfstate" \
+            -input=false
 
       - name: Validate
         run: terraform validate -no-color
@@ -55,36 +59,45 @@ jobs:
             -input=false \
             -no-color \
             -lock-timeout=2m \
-            -var-file="environments/dev.tfvars" \
+            -var-file="environments/prod.tfvars" \
             -out=tfplan
+
+      # ADDED - Reject deletion and replacement actions
+      - name: Block destructive changes
+        run: |
+          terraform show -json tfplan | jq -e '
+            [.resource_changes[]?
+             | select(.change.actions | index("delete"))]
+            | length == 0
+          '
 
       - name: Plan summary
         run: |
-          echo "### Terraform Development Plan" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Terraform Production Plan" >> "$GITHUB_STEP_SUMMARY"
           echo "Review the Generate saved plan logs before approving deployment." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload saved plan
         uses: actions/upload-artifact@v4
         with:
-          name: development-plan
+          name: production-plan  # CHANGED
           path: tfplan
           retention-days: 1
           if-no-files-found: error
 
   apply:
-    name: Apply Development Plan
+    name: Apply Production Plan  # CHANGED
     needs: plan
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
-    environment: development
+    environment: production  # CHANGED - Approval gate
 
     permissions:
       contents: read
       id-token: write
 
     env:
-      ARM_CLIENT_ID: ${{ vars.AZURE_DEPLOY_CLIENT_ID }}
+      ARM_CLIENT_ID: ${{ vars.AZURE_PROD_CLIENT_ID }} # CHANGED
       ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
@@ -102,20 +115,23 @@ jobs:
       - name: Download approved plan
         uses: actions/download-artifact@v4
         with:
-          name: development-plan
+          name: production-plan  # CHANGED
 
-      - name: Azure Login - Deployment Identity
+      - name: Azure Login - Production Deployment Identity
         uses: azure/login@v3
         with:
-          client-id: ${{ vars.AZURE_DEPLOY_CLIENT_ID }}
+          client-id: ${{ vars.AZURE_PROD_CLIENT_ID }} # CHANGED
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Initialise
-        run: terraform init -input=false
+      - name: Initialise Production Backend # CHANGED
+        run: |
+          terraform init \
+            -backend-config="key=prod.terraform.tfstate" \
+            -input=false
 
       - name: Apply saved plan
         run: terraform apply -input=false -lock-timeout=2m tfplan
 
-      - name: Verify monitoring subnet
-        run: terraform state show 'module.network.azurerm_subnet.subnets["monitoring"]'
+      - name: Verify Production VNet # CHANGED
+        run: terraform state show 'module.network.azurerm_virtual_network.vnet'
