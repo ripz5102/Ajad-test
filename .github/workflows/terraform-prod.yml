@@ -17,6 +17,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: environments/prod
+
     permissions:
       contents: read
       id-token: write
@@ -44,11 +48,8 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Initialise Production Backend # CHANGED
-        run: |
-          terraform init \
-            -backend-config="key=prod.terraform.tfstate" \
-            -input=false
+      - name: Initialise Production Backend
+        run: terraform init -input=false
 
       - name: Validate
         run: terraform validate -no-color
@@ -59,7 +60,6 @@ jobs:
             -input=false \
             -no-color \
             -lock-timeout=2m \
-            -var-file="environments/prod.tfvars" \
             -out=tfplan
 
       # ADDED - Reject deletion and replacement actions
@@ -79,8 +79,8 @@ jobs:
       - name: Upload saved plan
         uses: actions/upload-artifact@v4
         with:
-          name: production-plan  # CHANGED
-          path: tfplan
+          name: production-plan
+          path: environments/prod/tfplan
           retention-days: 1
           if-no-files-found: error
 
@@ -91,6 +91,9 @@ jobs:
     runs-on: ubuntu-latest
 
     environment: production  # CHANGED - Approval gate
+    defaults:
+      run:
+        working-directory: environments/prod
 
     permissions:
       contents: read
@@ -115,7 +118,8 @@ jobs:
       - name: Download approved plan
         uses: actions/download-artifact@v4
         with:
-          name: production-plan  # CHANGED
+          name: production-plan
+          path: environments/prod
 
       - name: Azure Login - Production Deployment Identity
         uses: azure/login@v3
@@ -124,11 +128,8 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Initialise Production Backend # CHANGED
-        run: |
-          terraform init \
-            -backend-config="key=prod.terraform.tfstate" \
-            -input=false
+      - name: Initialise Production Backend
+        run: terraform init -input=false
 
       - name: Apply saved plan
         run: terraform apply -input=false -lock-timeout=2m tfplan
