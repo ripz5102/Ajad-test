@@ -26,3 +26,6 @@ terraform.rc
 
 # macOS files
 .DS_Store
+
+!environments/dev/terraform.tfvars
+!environments/prod/terraform.tfvars

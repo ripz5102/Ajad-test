@@ -12,7 +12,7 @@ resource "azurerm_resource_group" "rg" {
 
 # Network Module - VNet and Subnets
 module "network" {
-  source = "./modules/network"
+  source = "../../modules/network"
 
   vnet_name           = var.vnet_name
   address_space       = var.vnet_address_space
